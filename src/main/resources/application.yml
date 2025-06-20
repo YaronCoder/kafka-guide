@@ -1,0 +1,34 @@
+spring:
+  kafka:
+    # 使用所有broker的地址，即使某些节点不可用，应用也能连接到可用的节点
+    bootstrap-servers: localhost:9092,localhost:9093,localhost:9094
+    consumer:
+      group-id: kafka-guide-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # 重要的消费者配置
+      max-poll-records: 500
+      session-timeout-ms: 45000
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # 重要的生产者配置
+      retries: 3
+      acks: all
+    listener:
+      # 重要的监听器配置
+      missing-topics-fatal: false
+      type: BATCH
+      concurrency: 3
+
+server:
+  port: 8080
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+  packages-to-scan: com.example
+  show-actuator: false
