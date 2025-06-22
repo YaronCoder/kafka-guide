@@ -2,25 +2,6 @@
 
 欢迎来到 Kafka 学习指南！这是一个深入浅出的 Kafka 教程，旨在帮助开发者更好地理解和使用 Kafka。
 
-```mermaid
-flowchart TD
-    T["主题: 科技月刊"]
-
-    subgraph "消费者群组 A [订单系统]"
-        direction LR
-        A1["消费者 A1"]
-        A2["消费者 A2"]
-    end
-
-    subgraph "消费者群组 B [数据分析系统]"
-        B1["消费者 B1"]
-    end
-
-    T --> A1
-    T --> A2
-    T --> B1
-```
-
 ## 内容概览
 
 本教程涵盖以下主要内容：
