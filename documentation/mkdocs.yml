@@ -1,0 +1,105 @@
+site_name: Kafka 学习指南
+site_description: 深入浅出 Kafka 教程
+site_author: Alan
+site_url: https://YaronCoder.github.io/kafka-guide/
+
+repo_name: YaronCoder/kafka-guide
+repo_url: https://github.com/YaronCoder/kafka-guide
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: zh
+  icon:
+    logo: material/book-open-page-variant
+  features:
+    - navigation.instant  # 即时加载
+    - navigation.tracking  # 在滚动时自动更新导航
+    - navigation.tabs  # 顶部标签导航
+    - navigation.sections  # 侧边栏分节
+    - navigation.expand  # 允许展开/折叠导航
+    - toc.follow  # 目录跟随
+    - navigation.top  # 返回顶部按钮
+    - search.highlight  # 搜索结果高亮
+    - search.share  # 搜索结果分享
+    - search.suggest  # 搜索建议
+    - content.code.copy  # 代码复制按钮
+    - content.code.annotate  # 代码注释
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 切换到深色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: 切换到浅色模式
+  font: false
+
+plugins:
+  - search:
+      lang: zh
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+  - minify:
+      minify_html: true
+  - glightbox  # 图片点击放大
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - def_list
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.caret  # 上标
+  - pymdownx.mark  # 高亮
+  - pymdownx.tilde  # 下标
+  - pymdownx.keys  # 键盘按键
+  - footnotes  # 脚注
+  - abbr  # 缩写
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - 首页: index.md
+  - 快速入门:
+    - 安装指南: 'Kafka Broker安装验证指南.md'
+    - 集群搭建: 'kafka-cluster-setup.md'
+  - 生产者指南:
+    - 幂等性配置: '3.4生产者配置/3.4.11enable.idempotence/解密Kafka生产者的"魔幻数字5".md'
+    - 超时参数: '3.4生产者配置/超时参数配置/Kafka生产者超时配置全解析：一次搞懂五个关键参数.md'
+  - 消费者指南:
+    - 消费者群组: '4.1Kafka消费者相关概念/4.1.1消费者和消费者群组/Kafka消费模型解析：群组的力量.md'
+    - 固定成员: '4.1Kafka消费者相关概念/4.1.3群组固定成员/Kafka有状态消费：固定成员与"专科医生"模式全解析.md'
+    - 超时配置: '4.5消费者配置/Kafka消费者超时配置全解析：一次搞懂关键参数.md'
+    - Offset管理: '4.6提交和偏移量/Kafka Offset管理陷阱：重复消费与丢失消息全解析.md'
+    - 消息语义: '4.6提交和偏移量/Kafka消息处理语义：至少一次vs至多一次.md'
+  - 存储原理:
+    - 分区分配: '6.5物理存储/6.5.2分区的分配/Kafka的"分蛋糕"艺术：分区是如何被巧妙分配的.md'
+    - 文件管理: '6.5物理存储/6.5.3文件管理/Kafka的"日记本"艺术：深入理解分区与片段(Segment).md'
+    - 消息格式: '6.5物理存储/6.5.4消息格式/Kafka生产者发送消息全流程解析：从消息到网络请求.md'
