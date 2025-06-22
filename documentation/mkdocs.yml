@@ -1,11 +1,11 @@
 site_name: Kafka 学习指南
 site_description: 深入浅出 Kafka 教程
-site_author: Alan
-site_url: https://YaronCoder.github.io/kafka-guide/
+site_author: YaronCoder
+site_url: https://yaroncoder.github.io/kafka-guide
 
 repo_name: YaronCoder/kafka-guide
 repo_url: https://github.com/YaronCoder/kafka-guide
-edit_uri: edit/main/docs/
+edit_uri: edit/master/documentation/docs/
 
 theme:
   name: material

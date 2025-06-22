@@ -2,7 +2,7 @@ name: Deploy MkDocs
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'documentation/**'
       - '.github/workflows/deploy-docs.yml'
@@ -30,4 +30,6 @@ jobs:
       - name: Deploy docs
         run: |
           cd documentation
-          mkdocs gh-deploy --force 
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          mkdocs gh-deploy --force --config-file mkdocs.yml --remote-branch gh-pages 
