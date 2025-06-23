@@ -35,7 +35,7 @@ sequenceDiagram
     Send-->>App: 返回 Future 对象
     deactivate Send
 
-    note over Sender, Broker: ④ delivery.timeout.ms (全程总时限从此开始)
+    note over Send, Broker: ④ delivery.timeout.ms (全程总时限从此开始)
 
     Note over Sender,Broker: 稍后...
 
