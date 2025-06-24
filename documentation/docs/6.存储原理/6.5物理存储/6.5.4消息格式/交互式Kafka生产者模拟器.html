@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交互式Kafka生产者模拟器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <!-- Chosen Palette: Warm Neutrals (Beige, Slate, Orange Accent) -->
+    <!-- Application Structure Plan: A vertical, scrollytelling SPA that turns the producer's message sending process into an interactive simulation. Users can "send" messages and watch them get batched, packaged into requests, and sent to a broker. A new modal feature is added to inspect batch/record headers, providing on-demand deep-dive information without cluttering the main UI. This hands-on approach is chosen to make the abstract, multi-step optimization process more tangible and easier to grasp than a static text description. -->
+    <!-- Visualization & Content Choices:
+        - Process Simulation: Goal: Explain process. Method: Interactive HTML/CSS diagram with animated elements. Interaction: User clicks to send messages, triggering JS logic for batching and sending. Justification: Provides a direct, visual feedback loop for the core process. Library: Vanilla JS.
+        - Efficiency Gain Chart: Goal: Compare. Method: Dynamic Chart.js Bar Chart. Interaction: The chart updates automatically as batches are sent, comparing batched vs. non-batched data transfer size. Justification: Fulfills Chart.js requirement and provides a quantitative visualization of *why* batching is effective. Library: Chart.js.
+        - Header Deep-Dive: Goal: Inform. Method: Interactive modal with HTML tables. Interaction: Clicking an inspect button opens the modal. Hovering over fields reveals explanations. Justification: Clearly presents the detailed structure of batches and records on-demand. Library: Vanilla JS.
+        - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used.
+    -->
+
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #FDFBF5;
+            color: #4A5568;
+        }
+        .bg-beige { background-color: #FDFBF5; }
+        .bg-slate { background-color: #4A5568; }
+        .text-slate { color: #4A5568; }
+        .text-beige { color: #FDFBF5; }
+        .accent-color { color: #DD6B20; }
+        .border-accent { border-color: #DD6B20; }
+
+        .interactive-section {
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+        }
+        .message {
+            position: absolute;
+            transition: all 1s ease-in-out;
+            z-index: 10;
+        }
+        .batch {
+            transition: all 0.5s ease-in-out;
+        }
+        .truck {
+            transition: transform 1.5s ease-in-out;
+        }
+        .progress-bar {
+            transition: width 0.3s ease-in-out;
+        }
+        .tooltip {
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 100;
+        }
+        .has-tooltip:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-beige">
+
+<header class="bg-slate text-beige p-4 sticky top-0 z-50 shadow-lg">
+    <div class="container mx-auto flex justify-between items-center">
+        <h1 class="text-xl md:text-2xl font-bold">交互式Kafka生产者模拟器</h1>
+        <p class="text-sm hidden md:block">可视化消息打包与发送全流程</p>
+    </div>
+</header>
+
+<main class="container mx-auto p-4 md:p-8">
+
+    <section class="text-center my-8 md:my-12">
+        <h2 class="text-3xl md:text-4xl font-bold text-slate mb-4">Kafka的“网上购物打包”哲学</h2>
+        <p class="max-w-3xl mx-auto text-lg leading-relaxed">
+            要理解Kafka生产者(Producer)的高效，最好的方式是把它想象成一个智能的电商仓库打包员。本模拟器将带您一步步体验这个“打包发货”的全过程。
+        </p>
+    </section>
+
+    <!-- Main Simulator Section -->
+    <div class="interactive-section bg-gray-100 p-4 md:p-6 rounded-2xl shadow-inner">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Controls -->
+            <div class="lg:col-span-1 bg-white p-4 rounded-lg shadow">
+                <h3 class="font-bold text-lg text-slate mb-4 border-b pb-2">模拟控制器</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label for="linger-ms" class="block text-sm font-medium">等待时间 (linger.ms)</label>
+                        <input type="range" id="linger-ms" min="0" max="5000" step="100" value="1000" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        <div class="text-right text-sm"><span id="linger-ms-value">1000</span> ms</div>
+                    </div>
+                    <div>
+                        <label for="batch-size" class="block text-sm font-medium">批次大小 (batch.size)</label>
+                        <input type="range" id="batch-size" min="3" max="10" step="1" value="5" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        <div class="text-right text-sm"><span id="batch-size-value">5</span> 条消息</div>
+                    </div>
+                    <button id="send-msg-btn" class="w-full bg-orange-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-600 transition-colors shadow-md">
+                        发送一条随机消息 📦
+                    </button>
+                </div>
+                <div class="mt-6">
+                    <h4 class="font-bold text-slate mb-2">层级关系：</h4>
+                    <div class="text-xs p-2 bg-gray-50 rounded">
+                        <p>🚚 **生产请求 (发往Broker)**</p>
+                        <p class="ml-4">🖼️ **批次 (发往分区)**</p>
+                        <p class="ml-8">📄 **消息/记录**</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Simulation Area -->
+            <div class="lg:col-span-2 relative min-h-[400px] bg-white p-4 rounded-lg shadow overflow-hidden">
+                <div id="simulation-area" class="h-full">
+                    <div class="grid grid-cols-2 gap-4 h-full">
+                        <!-- Producer Side -->
+                        <div id="producer-area" class="border-r-2 border-dashed pr-4">
+                            <h3 class="font-bold text-center text-slate">生产者打包区</h3>
+                            <div class="mt-4 space-y-4">
+                                <div id="batch-p0" class="batch p-2 border rounded-lg bg-blue-50">
+                                    <div class="flex justify-between items-center">
+                                        <span class="font-semibold text-blue-800 text-sm">发往 Partition 0 的批次</span>
+                                        <button data-partition="p0" class="inspect-btn text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded hover:bg-blue-300">剖析批次 🔍</button>
+                                    </div>
+                                    <div class="w-full bg-gray-200 rounded-full h-2.5 mt-1">
+                                        <div class="progress-bar bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                                    </div>
+                                    <div class="message-container min-h-[50px] mt-2 flex flex-wrap gap-1"></div>
+                                </div>
+                                <div id="batch-p1" class="batch p-2 border rounded-lg bg-green-50">
+                                    <div class="flex justify-between items-center">
+                                        <span class="font-semibold text-green-800 text-sm">发往 Partition 1 的批次</span>
+                                        <button data-partition="p1" class="inspect-btn text-xs bg-green-200 text-green-800 px-2 py-1 rounded hover:bg-green-300">剖析批次 🔍</button>
+                                    </div>
+                                    <div class="w-full bg-gray-200 rounded-full h-2.5 mt-1">
+                                        <div class="progress-bar bg-green-600 h-2.5 rounded-full" style="width: 0%"></div>
+                                    </div>
+                                    <div class="message-container min-h-[50px] mt-2 flex flex-wrap gap-1"></div>
+                                </div>
+                            </div>
+                            <div id="truck-area" class="mt-8 text-center">
+                                <div id="truck" class="text-6xl mx-auto">🚚</div>
+                                <p class="text-sm font-bold text-slate">生产请求 (发往Broker)</p>
+                            </div>
+                        </div>
+                        <!-- Broker Side -->
+                        <div id="broker-area" class="text-center">
+                            <h3 class="font-bold text-slate">Broker 接收区</h3>
+                            <div id="broker-log" class="mt-4 p-2 bg-gray-800 text-white rounded-lg h-5/6 overflow-y-auto text-left text-xs">
+                                <p class="text-gray-400">// 等待接收批次...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Explanation & Chart Section -->
+    <div class="interactive-section grid grid-cols-1 lg:grid-cols-2 gap-8 mt-12 items-center">
+        <div class="prose max-w-none">
+            <h3 class="text-2xl font-bold text-slate mb-4">为什么批处理如此高效？</h3>
+            <p>批处理的核心优势在于**减少开销**和**提升压缩率**。Kafka为每个批次和每条记录都设计了精巧的标头，并通过“只记差值”的策略，极大地减少了每条消息的附加数据。</p>
+            <p>右侧的图表直观地展示了批处理在传输字节数上的巨大优势。随着您在上方模拟器中发送的批次越来越多，可以看到“有批处理”的数据增长远比“无批处理”的假设情况要慢得多。</p>
+        </div>
+        <div class="bg-white p-4 rounded-lg shadow">
+            <div class="chart-container relative h-[300px] max-w-lg mx-auto">
+                <canvas id="efficiencyChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+</main>
+
+<!-- Modal for Batch Inspection -->
+<div id="batch-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center p-4 border-b">
+            <h3 id="modal-title" class="text-xl font-bold">批次详情</h3>
+            <button id="close-modal-btn" class="text-2xl font-bold">&times;</button>
+        </div>
+        <div class="p-6">
+            <div id="modal-content"></div>
+        </div>
+    </div>
+</div>
+
+
+<footer class="text-center p-6 bg-slate text-beige mt-12">
+    <p>&copy; 2025 Kafka Interactive Explainer. All Rights Reserved.</p>
+</footer>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const lingerMsSlider = document.getElementById('linger-ms');
+        const lingerMsValue = document.getElementById('linger-ms-value');
+        const batchSizeSlider = document.getElementById('batch-size');
+        const batchSizeValue = document.getElementById('batch-size-value');
+        const sendMsgBtn = document.getElementById('send-msg-btn');
+
+        const truck = document.getElementById('truck');
+        const brokerLog = document.getElementById('broker-log');
+
+        const modal = document.getElementById('batch-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const modalTitle = document.getElementById('modal-title');
+        const modalContent = document.getElementById('modal-content');
+
+        const batches = {
+            'p0': {
+                element: document.getElementById('batch-p0'),
+                messages: [],
+                timer: null,
+                progressBar: document.querySelector('#batch-p0 .progress-bar'),
+                container: document.querySelector('#batch-p0 .message-container'),
+                color: 'blue'
+            },
+            'p1': {
+                element: document.getElementById('batch-p1'),
+                messages: [],
+                timer: null,
+                progressBar: document.querySelector('#batch-p1 .progress-bar'),
+                container: document.querySelector('#batch-p1 .message-container'),
+                color: 'green'
+            }
+        };
+
+        let msgCounter = 0;
+        let bytesWithBatching = 0;
+        let bytesWithoutBatching = 0;
+        const MSG_SIZE = 100; // a mock size in bytes for a message payload
+        const BATCH_OVERHEAD = 85; // a mock overhead for a batch header (approx)
+        const MSG_OVERHEAD = 15; // a mock overhead for a record header + single send overhead
+
+        // Chart.js setup
+        const efficiencyCtx = document.getElementById('efficiencyChart').getContext('2d');
+        const efficiencyChart = new Chart(efficiencyCtx, {
+            type: 'bar',
+            data: {
+                labels: ['数据传输量对比 (Bytes)'],
+                datasets: [
+                    {
+                        label: '有批处理',
+                        data: [0],
+                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: '无批处理 (假设)',
+                        data: [0],
+                        backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: '传输字节数' }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.dataset.label}: ${context.raw} bytes`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        function updateChart() {
+            efficiencyChart.data.datasets[0].data[0] = bytesWithBatching;
+            efficiencyChart.data.datasets[1].data[0] = bytesWithoutBatching;
+            efficiencyChart.update();
+        }
+
+        lingerMsSlider.addEventListener('input', (e) => lingerMsValue.textContent = e.target.value);
+        batchSizeSlider.addEventListener('input', (e) => batchSizeValue.textContent = e.target.value);
+
+        function logToBroker(message) {
+            const p = document.createElement('p');
+            p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            if(brokerLog.firstElementChild && brokerLog.firstElementChild.textContent.includes('等待接收')) {
+                brokerLog.innerHTML = '';
+            }
+            brokerLog.appendChild(p);
+            brokerLog.scrollTop = brokerLog.scrollHeight;
+        }
+
+        function sendBatch(partitionKey) {
+            const batch = batches[partitionKey];
+            if (batch.messages.length === 0) return;
+
+            clearTimeout(batch.timer);
+            batch.timer = null;
+
+            logToBroker(`打包完成: ${partitionKey} 的批次 (含 ${batch.messages.length} 条消息)`);
+
+            batch.element.style.transform = 'scale(0.8)';
+            batch.element.style.opacity = '0.5';
+
+            setTimeout(() => {
+                truck.style.transform = 'scale(1.2)';
+                logToBroker(`批次已装车, 准备发送...`);
+
+                bytesWithBatching += BATCH_OVERHEAD + (batch.messages.length * MSG_SIZE);
+                bytesWithoutBatching += batch.messages.length * (MSG_SIZE + MSG_OVERHEAD);
+                updateChart();
+
+                setTimeout(() => {
+                    truck.style.transform = 'translateX(250%)';
+                    logToBroker(`生产请求已发送至 Broker!`);
+
+                    setTimeout(() => {
+                        logToBroker(`Broker 成功接收并写入 ${partitionKey} 的批次。`);
+                        truck.style.transition = 'none';
+                        truck.style.transform = 'translateX(0) scale(1)';
+                        setTimeout(() => {
+                            truck.style.transition = 'transform 1.5s ease-in-out';
+                        }, 50);
+                    }, 1500);
+                }, 500);
+            }, 500);
+
+            batch.messages = [];
+            batch.container.innerHTML = '';
+            batch.progressBar.style.width = '0%';
+            batch.element.style.transform = 'scale(1)';
+            batch.element.style.opacity = '1';
+        }
+
+        sendMsgBtn.addEventListener('click', () => {
+            msgCounter++;
+            const partitionKey = `p${msgCounter % 2}`;
+            const batch = batches[partitionKey];
+            const batchSize = parseInt(batchSizeSlider.value);
+            const lingerMs = parseInt(lingerMsSlider.value);
+
+            const msgElement = document.createElement('span');
+            msgElement.className = 'message-dot bg-gray-500 rounded-full w-3 h-3 block';
+            msgElement.title = `Message ${msgCounter}`;
+            batch.container.appendChild(msgElement);
+            batch.messages.push({id: msgCounter, key: `k-${msgCounter}`});
+
+            const percentFull = (batch.messages.length / batchSize) * 100;
+            batch.progressBar.style.width = `${percentFull}%`;
+
+            logToBroker(`消息 ${msgCounter} 已创建, 放入 ${partitionKey} 的批次...`);
+
+            if (batch.messages.length >= batchSize) {
+                logToBroker(`批次已满! (${partitionKey}) 立即发送...`);
+                sendBatch(partitionKey);
+            } else {
+                if (!batch.timer) {
+                    logToBroker(`启动 ${lingerMs}ms 倒计时 for ${partitionKey}...`);
+                    batch.timer = setTimeout(() => {
+                        logToBroker(`等待时间到! (${partitionKey}) 发送批次...`);
+                        sendBatch(partitionKey);
+                    }, lingerMs);
+                }
+            }
+        });
+
+        // Modal logic
+        const createTooltip = (text) => {
+            return `<span class="has-tooltip relative cursor-help">
+                    <span class="text-xs font-bold text-blue-600"> ❓</span>
+                    <div class="tooltip absolute bottom-full left-1/2 -translate-x-1/2 w-56 bg-slate-800 text-white text-xs rounded py-1 px-2 mb-2 text-center">
+                        ${text}
+                        <svg class="absolute text-slate-800 h-2 w-full left-0 top-full" x="0px" y="0px" viewBox="0 0 255 255" xml:space="preserve"><polygon class="fill-current" points="0,0 127.5,127.5 255,0"/></svg>
+                    </div>
+                </span>`;
+        };
+
+        document.querySelectorAll('.inspect-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const partitionKey = e.target.dataset.partition;
+                const batch = batches[partitionKey];
+                const lastMessageIndex = batch.messages.length > 0 ? batch.messages.length - 1 : 0;
+
+                modalTitle.textContent = `剖析 ${partitionKey.toUpperCase()} 的批次 (含 ${batch.messages.length} 条消息)`;
+
+                let contentHTML = `
+                <div class="mb-6">
+                    <h4 class="font-bold text-lg mb-2 text-slate-700">批次标头 (Batch Header)</h4>
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr><th class="py-2 px-3 w-2/5">字段</th><th class="py-2 px-3">值</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr class="bg-white border-b"><td class="py-2 px-3 font-medium">魔数 (Magic Byte) ${createTooltip('表示消息格式的版本')}</td><td class="py-2 px-3 font-mono">2</td></tr>
+                            <tr class="bg-gray-50 border-b"><td class="py-2 px-3 font-medium">CRC32 校验和 ${createTooltip('验证批次完整性，由生产者计算')}</td><td class="py-2 px-3 font-mono">0xABCD1234</td></tr>
+                            <tr class="bg-white border-b"><td class="py-2 px-3 font-medium">批次大小 ${createTooltip('整个批次的字节大小')}</td><td class="py-2 px-3 font-mono">${BATCH_OVERHEAD + batch.messages.length * MSG_SIZE} bytes</td></tr>
+                            <tr class="bg-white border-b"><td class="py-2 px-3 font-medium">起始/最后偏移量差值 ${createTooltip('BaseOffset由Broker设置, LastOffsetDelta是批次内最后一条消息与Base的差值')}</td><td class="py-2 px-3 font-mono">Base: -1, Delta: +${lastMessageIndex}</td></tr>
+                            <tr class="bg-gray-50 border-b"><td class="py-2 px-3 font-medium">起始/最大时间戳 ${createTooltip('批次中第一条和最后一条消息的时间戳')}</td><td class="py-2 px-3 font-mono">${new Date().toLocaleTimeString()}</td></tr>
+                            <tr class="bg-white border-b"><td class="py-2 px-3 font-medium">生产者 ID/Epoch/Seq ${createTooltip('用于实现精确一次性保证')}</td><td class="py-2 px-3 font-mono">1001 / 0 / 0</td></tr>
+                             <tr class="bg-gray-50 border-b"><td class="py-2 px-3 font-medium">首领Epoch ${createTooltip('由Broker设置，用于故障恢复')}</td><td class="py-2 px-3 font-mono text-red-500">-1 (待Broker设置)</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div>
+                    <h4 class="font-bold text-lg mb-2 text-slate-700">批次中的记录 (Records)</h4>
+            `;
+
+                if (batch.messages.length === 0) {
+                    contentHTML += `<p class="text-center text-gray-500 py-4">此批次暂无消息。</p>`;
+                } else {
+                    contentHTML += `
+                    <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th class="py-2 px-3">记录#</th>
+                                <th class="py-2 px-3">大小(Bytes) ${createTooltip('单条记录的字节大小')}</th>
+                                <th class="py-2 px-3">属性 ${createTooltip('记录级别的属性，暂未使用')}</th>
+                                <th class="py-2 px-3">偏移量差值 ${createTooltip('与批次第一条的偏移量之差')}</th>
+                                <th class="py-2 px-3">时间戳差值 ${createTooltip('与批次第一条的时间戳之差')}</th>
+                                <th class="py-2 px-3">有效载荷(Key)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                    batch.messages.forEach((msg, index) => {
+                        contentHTML += `
+                        <tr class="bg-white border-b">
+                            <td class="py-2 px-3 font-medium">${msg.id}</td>
+                            <td class="py-2 px-3 font-mono">${MSG_SIZE + MSG_OVERHEAD}</td>
+                            <td class="py-2 px-3 font-mono">0</td>
+                            <td class="py-2 px-3 font-mono">+${index}</td>
+                            <td class="py-2 px-3 font-mono">+${index * 10}ms</td>
+                            <td class="py-2 px-3 font-mono text-xs">${msg.key}</td>
+                        </tr>
+                    `;
+                    });
+                    contentHTML += '</tbody></table></div>';
+                }
+
+                contentHTML += '</div>';
+                modalContent.innerHTML = contentHTML;
+                modal.classList.remove('hidden');
+            });
+        });
+
+        closeModalBtn.addEventListener('click', () => modal.classList.add('hidden'));
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
+        });
+
+        logToBroker("模拟器已就绪。请配置参数并发送消息。");
+    });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交互式Kafka领导者选举模拟器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <!-- Chosen Palette: Warm Sand & Deep Slate -->
+    <!-- Application Structure Plan: A centralized, interactive "digital sandbox" model. The primary information architecture is a single, visually rich interactive stage where users can observe the entire leader failover process. This is more effective than a linear text-based report because it allows users to trigger the event and see the cause-and-effect relationships between components (Controller, Brokers, ZooKeeper) in real-time. A step-by-step textual guide accompanies the animation, ensuring users understand the 'why' behind each visual change. This task-oriented, "learn-by-doing" structure is ideal for demystifying a complex distributed systems process. -->
+    <!-- Visualization & Content Choices:
+        - System State Diagram: Goal: Inform initial state. Method: HTML/CSS diagram. Interaction: Hovering over elements shows tooltips. Justification: Provides a clear baseline before the simulation starts. Library: Vanilla JS.
+        - Leader Failover Process: Goal: Explain dynamic process. Method: Multi-stage animation on the central diagram. Interaction: A single button triggers the entire choreographed sequence. Text panel updates in sync with each animation stage. Justification: Turns an abstract, multi-step process into a concrete, observable story, which is the most effective way to teach this concept. Library: Vanilla JS.
+        - Key Concepts (Leader, Follower, Controller): Goal: Define roles. Method: Visually distinct styles and icons within the diagram, supported by introductory text. Justification: Integrates definitions directly into the visual context, enhancing comprehension. Library: Vanilla JS for dynamic styling.
+        - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. NO Chart.js used as this is a process simulation, not data charting.
+    -->
+
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #F9F6F2; /* Warm Sand */
+            color: #334155; /* Deep Slate */
+        }
+        .bg-sand { background-color: #F9F6F2; }
+        .bg-slate { background-color: #334155; }
+        .text-slate { color: #334155; }
+        .text-sand { color: #F9F6F2; }
+        .accent-color { color: #D97706; } /* Amber */
+        .border-accent { border-color: #D97706; }
+        .bg-accent { background-color: #D97706; }
+
+        .interactive-stage {
+            min-height: 500px;
+        }
+
+        .broker-node {
+            transition: all 0.5s ease-in-out;
+            border: 2px solid #94A3B8; /* Slate 400 */
+        }
+
+        .broker-node.controller::before {
+            content: '👑';
+            position: absolute;
+            top: -12px;
+            left: -12px;
+            font-size: 1.5rem;
+            transform: rotate(-15deg);
+        }
+
+        .partition-replica {
+            transition: all 0.5s ease-in-out;
+        }
+
+        .leader {
+            background-color: #3B82F6; /* Blue 500 */
+            color: white;
+            border: 2px solid #1E40AF;
+        }
+
+        .follower {
+            background-color: #94A3B8; /* Slate 400 */
+            color: white;
+            border: 2px dashed #475569;
+        }
+
+        .isr {
+            outline: 2px dashed #16A34A; /* Green 600 */
+            outline-offset: 3px;
+        }
+
+        .failed {
+            opacity: 0.2;
+            transform: scale(0.95) rotate(-2deg);
+            background-color: #EF4444; /* Red 500 */
+        }
+
+        .arrow {
+            position: absolute;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+            color: #D97706;
+            font-size: 2rem;
+            font-weight: bold;
+            pointer-events: none;
+        }
+
+        #log-panel li {
+            opacity: 0.3;
+            transition: opacity 0.5s ease-in-out;
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+        #log-panel li.active {
+            opacity: 1;
+            font-weight: 600;
+            color: #D97706;
+            background-color: rgba(245, 158, 11, 0.1);
+        }
+
+        /* Responsive arrow positions */
+        #arrow-zk-controller { top: 20%; left: 65%; }
+        #arrow-controller-b { top: 45%; left: 45%; transform: rotate(180deg); }
+        #arrow-controller-c { bottom: 30%; left: 50%; transform: rotate(90deg); }
+
+        @media (max-width: 1023px) {
+            .interactive-stage { min-height: 600px; }
+            #arrow-zk-controller { top: 5%; right: 5%; left: auto; }
+            #arrow-controller-b { top: 45%; left: 35%; transform: rotate(90deg); }
+            #arrow-controller-c { top: 75%; left: 50%; transform: rotate(180deg); }
+        }
+
+    </style>
+</head>
+<body class="bg-sand">
+
+<div class="container mx-auto p-4 md:p-8">
+
+    <header class="text-center mb-12">
+        <h1 class="text-3xl md:text-4xl font-extrabold text-slate mb-2">Kafka高可用基石：领导者选举模拟器</h1>
+        <p class="text-lg text-slate-600 max-w-3xl mx-auto">单个节点的故障不应导致服务瘫痪。本应用将通过一个可交互的“数字沙盘”，带您亲手触发并观察Kafka是如何全自动地完成“权力交接”，以保证服务永不落幕的。</p>
+    </header>
+
+    <main class="bg-white rounded-2xl shadow-xl p-6 md:p-8">
+        <div class="grid lg:grid-cols-3 gap-8">
+
+            <!-- Left Panel: Explanation & Controls -->
+            <div class="lg:col-span-1 prose max-w-none">
+                <h2 class="font-bold text-slate">大戏开演：首领崩溃后的选举全过程</h2>
+                <p>下方是我们的“剧团”成员。Broker C 同时扮演着“总指挥”（👑 控制器）的角色。初始时，Broker A 是 P0 的首领，B 和 C 是它的跟随者。</p>
+                <ul id="log-panel" class="space-y-3 mt-4">
+                    <li data-step="0" class="active"><strong>初始状态:</strong> 系统稳定，Broker A 正常服务。</li>
+                    <li data-step="1"><strong>1. 故障感知:</strong> 控制器通过 ZooKeeper (🗄️) 感知到 Broker A 离线。</li>
+                    <li data-step="2"><strong>2. 决策:</strong> 控制器从同步副本列表(ISR)中为 P0 挑选新的首领。</li>
+                    <li data-step="3"><strong>3. 任命:</strong> 控制器向新首领和其余跟随者下达任命 (📜)，明确新角色。</li>
+                    <li data-step="4"><strong>4. 公告:</strong> 控制器向整个集群广播元数据更新 (🔄)，同步变更信息。</li>
+                    <li data-step="5"><strong>5. 恢复正常:</strong> 新首领开始服务，集群恢复高可用状态。</li>
+                </ul>
+                <div class="mt-8 flex space-x-4">
+                    <button id="next-step-btn" class="w-full bg-accent text-white font-bold py-3 px-4 rounded-lg shadow-md hover:bg-amber-700 transition-all text-lg disabled:opacity-50 disabled:cursor-not-allowed">模拟 Broker A 故障 💥</button>
+                    <button id="reset-btn" class="w-1/3 bg-slate text-white font-bold py-3 px-4 rounded-lg shadow-md hover:bg-slate-800 transition-all">重置</button>
+                </div>
+            </div>
+
+            <!-- Right Panel: Interactive Stage -->
+            <div id="interactive-stage" class="lg:col-span-2 relative interactive-stage flex flex-col items-center justify-around bg-sand rounded-lg p-4 border-2 border-slate-200">
+
+                <!-- ZooKeeper Icon -->
+                <div id="zookeeper" class="absolute top-4 right-4 text-center">
+                    <div class="text-4xl">🗄️</div>
+                    <p class="text-xs font-bold">ZooKeeper</p>
+                </div>
+
+                <!-- Broker Nodes Layout -->
+                <div id="broker-layout" class="w-full h-full flex flex-col items-center justify-around space-y-4 lg:space-y-0">
+                    <div class="w-full flex justify-center">
+                        <div id="broker-b" data-id="B" class="broker-node relative bg-white p-4 rounded-lg shadow-md w-48 text-center">
+                            <h3 class="font-bold text-lg">Broker B</h3>
+                            <div class="partition-replica follower isr mt-2 p-2 rounded">P0 (Follower)</div>
+                        </div>
+                    </div>
+
+                    <div class="w-full flex flex-col items-center space-y-4 md:flex-row md:justify-around md:space-y-0">
+                        <div id="broker-a" data-id="A" class="broker-node relative bg-white p-4 rounded-lg shadow-md w-48 text-center">
+                            <h3 class="font-bold text-lg">Broker A</h3>
+                            <div class="partition-replica leader isr mt-2 p-2 rounded">P0 (Leader)</div>
+                        </div>
+                        <div id="broker-c" data-id="C" class="broker-node controller relative bg-white p-4 rounded-lg shadow-md w-48 text-center">
+                            <h3 class="font-bold text-lg">Broker C</h3>
+                            <div class="partition-replica follower isr mt-2 p-2 rounded">P0 (Follower)</div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Arrows for animation -->
+                <div id="arrow-zk-controller" class="arrow">⚡️</div>
+                <div id="arrow-controller-b" class="arrow">📜</div>
+                <div id="arrow-controller-c" class="arrow">🔄</div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const nextStepBtn = document.getElementById('next-step-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const logItems = document.querySelectorAll('#log-panel li');
+
+        const brokerA = document.getElementById('broker-a');
+        const brokerB = document.getElementById('broker-b');
+        const brokerC = document.getElementById('broker-c');
+
+        const partitionA = brokerA.querySelector('.partition-replica');
+        const partitionB = brokerB.querySelector('.partition-replica');
+        const partitionC = brokerC.querySelector('.partition-replica');
+        const controllerNode = document.querySelector('.controller');
+
+        const arrowZkController = document.getElementById('arrow-zk-controller');
+        const arrowControllerB = document.getElementById('arrow-controller-b');
+        const arrowControllerC = document.getElementById('arrow-controller-c');
+
+        let simulationStep = 0;
+
+        const initialState = {
+            brokerAClass: brokerA.className,
+            partitionA: { class: partitionA.className, text: partitionA.textContent },
+            partitionB: { class: partitionB.className, text: partitionB.textContent },
+            partitionC: { class: partitionC.className, text: partitionC.textContent },
+        };
+
+        function resetState() {
+            simulationStep = 0;
+
+            nextStepBtn.disabled = false;
+            nextStepBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            nextStepBtn.textContent = '模拟 Broker A 故障 💥';
+
+            brokerA.className = initialState.brokerAClass;
+            partitionA.className = initialState.partitionA.class;
+            partitionA.textContent = initialState.partitionA.text;
+            partitionB.className = initialState.partitionB.class;
+            partitionB.textContent = initialState.partitionB.text;
+            partitionC.className = initialState.partitionC.class;
+            partitionC.textContent = initialState.partitionC.text;
+
+            arrowZkController.style.opacity = '0';
+            arrowControllerB.style.opacity = '0';
+            arrowControllerC.style.opacity = '0';
+
+            if (controllerNode) controllerNode.style.boxShadow = '';
+            partitionB.style.boxShadow = '';
+            partitionC.style.boxShadow = '';
+
+
+            updateLog(0);
+        }
+
+        function updateLog(step) {
+            logItems.forEach(item => {
+                item.classList.remove('active');
+                if (parseInt(item.dataset.step) === step) {
+                    item.classList.add('active');
+                }
+            });
+        }
+
+        function advanceSimulation() {
+            switch (simulationStep) {
+                case 0: // Step 1: Failure Detection
+                    updateLog(1);
+                    brokerA.classList.add('failed');
+                    arrowZkController.style.opacity = '1';
+                    nextStepBtn.textContent = '下一步：控制器决策';
+                    break;
+
+                case 1: // Step 2: Decision
+                    arrowZkController.style.opacity = '0';
+                    updateLog(2);
+                    controllerNode.style.boxShadow = '0 0 20px #D97706';
+                    partitionB.style.boxShadow = '0 0 15px #16A34A';
+                    partitionC.style.boxShadow = '0 0 15px #16A34A';
+                    nextStepBtn.textContent = '下一步：任命新首领';
+                    break;
+
+                case 2: // Step 3: Appointment
+                    controllerNode.style.boxShadow = '';
+                    partitionC.style.boxShadow = '';
+                    updateLog(3);
+                    arrowControllerB.style.opacity = '1';
+                    nextStepBtn.textContent = '下一步：广播更新';
+                    break;
+
+                case 3: // Step 4: Broadcast
+                    arrowControllerB.style.opacity = '0';
+                    partitionB.classList.remove('follower');
+                    partitionB.classList.add('leader');
+                    partitionB.textContent = 'P0 (New Leader)';
+                    partitionB.style.boxShadow = '';
+                    updateLog(4);
+                    arrowControllerC.style.opacity = '1';
+                    nextStepBtn.textContent = '完成';
+                    break;
+
+                case 4: // Step 5: Final State
+                    arrowControllerC.style.opacity = '0';
+                    updateLog(5);
+                    nextStepBtn.textContent = '模拟完成';
+                    nextStepBtn.disabled = true;
+                    nextStepBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    break;
+            }
+            simulationStep++;
+        }
+
+        nextStepBtn.addEventListener('click', advanceSimulation);
+        resetBtn.addEventListener('click', resetState);
+
+        // Initial setup
+        resetState();
+    });
+</script>
+
+</body>
+</html>
