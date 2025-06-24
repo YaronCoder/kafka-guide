@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交互式Kafka分区片段模拟器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <!-- Chosen Palette: Mint & Slate -->
+    <!-- Application Structure Plan: A task-oriented, interactive simulation model. The information architecture is centered around a "digital sandbox" where users can actively engage with the concept of partition segments. The layout includes: 1) A main visualization stage representing the partition log. 2) A control panel with action buttons (Write Data, Run Cleanup) to drive the simulation. 3) A real-time log panel that explains the visual changes. This structure is superior to a static report because it transforms a passive reading experience into an active learning one, allowing users to build an intuitive understanding of a dynamic process by doing and observing. -->
+    <!-- Visualization & Content Choices:
+        - Partition as Segments: Goal: Explain structure. Method: A series of HTML/CSS divs representing log segments ("diary books"). Interaction: Segments visually fill up and new ones are created. Justification: A tangible representation of how a single logical partition is physically chunked into files. Library: Vanilla JS.
+        - Data Writing Process: Goal: Demonstrate append-only logic. Method: Animated icons representing messages. Interaction: Clicking a button animates messages flowing *only* into the "active" segment. Justification: Clearly shows that writes are always to the newest segment. Library: Vanilla JS.
+        - Segment Cleanup Process: Goal: Explain deletion rules. Method: Animation of a "cleanup bot". Interaction: A button triggers an animation where the bot scans and removes *only* expired, non-active segments, visually ignoring the active one. Justification: Provides irrefutable visual proof of the "active segment is never deleted" rule. Library: Vanilla JS.
+        - File Handles Issue: Goal: Inform about resource usage. Method: A simple grid of icons. Justification: A straightforward visual metaphor for a large number of open files. Library: N/A.
+        - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used.
+    -->
+
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #F8FAFC; /* slate-50 */
+            color: #334155; /* slate-700 */
+        }
+        .segment {
+            transition: all 0.5s ease-in-out;
+            border: 2px solid #CBD5E1;
+        }
+        .segment.active {
+            border-color: #2563EB; /* blue-600 */
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+        }
+        .segment.expired {
+            border-color: #DC2626; /* red-600 */
+            background-color: #FEE2E2; /* red-100 */
+        }
+        .segment.deleting {
+            transform: scale(0);
+            opacity: 0;
+        }
+        .data-point {
+            transition: width 0.3s ease-in-out;
+        }
+        .log-entry {
+            display: block;
+            opacity: 0;
+            animation: fadeIn 0.5s forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .cleanup-bot {
+            transition: left 1.5s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-50">
+
+<main class="container mx-auto p-4 md:p-8">
+
+    <header class="text-center mb-12">
+        <h1 class="text-3xl md:text-4xl font-bold text-slate-800 mb-2">Kafka的“日记本”艺术</h1>
+        <p class="text-lg text-slate-600 max-w-3xl mx-auto">一个交互式分区片段(Segment)模拟器</p>
+    </header>
+
+    <section class="grid lg:grid-cols-5 gap-8 mb-8">
+        <!-- Left Panel: Visualization -->
+        <div class="lg:col-span-3 p-6 bg-white rounded-xl shadow-lg relative overflow-hidden">
+            <h3 class="text-xl font-bold mb-4 border-b pb-2 text-slate-700">分区日志可视化 (Partition Log)</h3>
+            <div id="partition-container" class="flex items-center space-x-2 p-4 bg-slate-100 rounded-lg h-48 overflow-x-auto">
+                <!-- Segments will be generated here -->
+            </div>
+            <div id="cleanup-bot" class="absolute bottom-10 text-4xl" style="left: -50px;">🤖</div>
+            <div class="mt-4 text-xs text-center space-x-4">
+                <span class="inline-flex items-center"><span class="w-3 h-3 rounded-full bg-blue-500 mr-2 border-2 border-blue-700"></span>活动片段</span>
+                <span class="inline-flex items-center"><span class="w-3 h-3 rounded-full bg-slate-200 mr-2 border-2 border-slate-400"></span>已关闭片段</span>
+                <span class="inline-flex items-center"><span class="w-3 h-3 rounded-full bg-red-200 mr-2 border-2 border-red-600"></span>已过期片段</span>
+            </div>
+        </div>
+
+        <!-- Right Panel: Control & Log -->
+        <div class="lg:col-span-2 p-6 bg-slate-800 text-white rounded-xl shadow-lg flex flex-col">
+            <h3 class="text-xl font-bold mb-4 border-b border-slate-600 pb-2">模拟控制台</h3>
+            <div class="space-y-4 mb-4">
+                <p class="text-sm text-slate-300">每个片段(日记本)最多写5条消息，保留时间为10秒。</p>
+                <div class="grid grid-cols-2 gap-4">
+                    <button id="write-btn" class="w-full bg-blue-500 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-blue-600 transition-all">写入数据 ✍️</button>
+                    <button id="cleanup-btn" class="w-full bg-red-500 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-red-600 transition-all">运行清理 🤖</button>
+                </div>
+                <button id="reset-btn" class="w-full bg-slate-500 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-slate-600 transition-all mt-4">重置模拟</button>
+            </div>
+            <div id="log-container" class="flex-grow bg-black bg-opacity-20 font-mono text-sm p-4 rounded-md overflow-y-auto h-48">
+                <pre id="log-output" class="whitespace-pre-wrap"></pre>
+            </div>
+        </div>
+    </section>
+
+    <section class="mt-8 p-6 bg-white rounded-xl shadow-lg">
+        <h2 class="text-xl font-bold mb-4 border-b pb-2 text-slate-700">文件句柄使用情况</h2>
+        <div id="handles-container" class="grid grid-cols-10 sm:grid-cols-20 gap-1 text-center text-xl p-4 bg-slate-50 rounded-lg">
+            <!-- File handles will be generated here -->
+        </div>
+    </section>
+
+</main>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const partitionContainer = document.getElementById('partition-container');
+        const logOutput = document.getElementById('log-output');
+        const writeBtn = document.getElementById('write-btn');
+        const cleanupBtn = document.getElementById('cleanup-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const cleanupBot = document.getElementById('cleanup-bot');
+        const handlesContainer = document.getElementById('handles-container');
+
+        const SEGMENT_SIZE_LIMIT = 5;
+        const RETENTION_MS = 10000;
+
+        let state = {
+            segments: [],
+            messageCount: 0,
+        };
+
+        function log(message) {
+            const entry = document.createElement('span');
+            entry.className = 'log-entry';
+            entry.innerHTML = `> ${message}\n`;
+            logOutput.appendChild(entry);
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+
+        function updateFileHandles() {
+            handlesContainer.innerHTML = '';
+            const handleCount = state.segments.length;
+            const displayCount = Math.min(handleCount, 100);
+            for(let i=0; i<displayCount; i++){
+                const handle = document.createElement('span');
+                handle.textContent = '📖';
+                handle.title = `Segment ${i}`;
+                handlesContainer.appendChild(handle);
+            }
+            if (handleCount > 100) {
+                const handle = document.createElement('span');
+                handle.textContent = '...';
+                handlesContainer.appendChild(handle);
+            }
+        }
+
+        function render() {
+            partitionContainer.innerHTML = '';
+            state.segments.forEach((seg, index) => {
+                const segmentDiv = document.createElement('div');
+                segmentDiv.id = `segment-${index}`;
+                segmentDiv.className = `segment relative flex-shrink-0 w-40 h-32 p-2 rounded-lg ${seg.active ? 'active' : ''}`;
+
+                const isExpired = !seg.active && (Date.now() - seg.closedTime) > RETENTION_MS;
+                if (isExpired) {
+                    segmentDiv.classList.add('expired');
+                }
+
+                const dataBar = document.createElement('div');
+                dataBar.className = 'data-point absolute bottom-2 left-2 right-2 h-4 bg-slate-300 rounded';
+                const dataFill = document.createElement('div');
+                dataFill.className = `h-full bg-slate-500 rounded`;
+                dataFill.style.width = `${(seg.size / SEGMENT_SIZE_LIMIT) * 100}%`;
+                dataBar.appendChild(dataFill);
+
+                segmentDiv.innerHTML = `<h4 class="font-bold text-sm">Segment ${index}</h4><p class="text-xs">${seg.active ? '活动中...' : '已关闭'}</p>`;
+                segmentDiv.appendChild(dataBar);
+                partitionContainer.appendChild(segmentDiv);
+            });
+            updateFileHandles();
+            partitionContainer.scrollLeft = partitionContainer.scrollWidth;
+        }
+
+        function getActiveSegment() {
+            return state.segments.find(s => s.active);
+        }
+
+        function addSegment() {
+            const newSegment = {
+                active: true,
+                size: 0,
+                createdTime: Date.now(),
+                closedTime: null
+            };
+            state.segments.push(newSegment);
+            log(`片段 ${state.segments.length - 1} 已创建并激活。`);
+        }
+
+        function writeData() {
+            let activeSegment = getActiveSegment();
+
+            if (!activeSegment || activeSegment.size >= SEGMENT_SIZE_LIMIT) {
+                if (activeSegment) {
+                    activeSegment.active = false;
+                    activeSegment.closedTime = Date.now();
+                    log(`片段 ${state.segments.length-1} 已写满并关闭。`);
+                }
+                addSegment();
+                activeSegment = getActiveSegment();
+            }
+
+            activeSegment.size++;
+            state.messageCount++;
+            log(`消息 ${state.messageCount} 写入活动片段 ${state.segments.indexOf(activeSegment)}。`);
+            render();
+        }
+
+        async function runCleanup() {
+            log("--- 清理程序启动 ---");
+            cleanupBot.style.left = '-50px';
+            cleanupBot.style.display = 'block';
+
+            if(state.segments.filter(s => !s.active).length === 0) {
+                log("没有已关闭的片段可供清理。");
+                await new Promise(r => setTimeout(r, 1000));
+                cleanupBot.style.display = 'none';
+                return;
+            }
+
+            await new Promise(r => setTimeout(r, 500));
+
+            for (let i = 0; i < state.segments.length; i++) {
+                const seg = state.segments[i];
+                const segEl = document.getElementById(`segment-${i}`);
+                if (!segEl) continue;
+
+                const elRect = segEl.getBoundingClientRect();
+                const containerRect = partitionContainer.getBoundingClientRect();
+                cleanupBot.style.left = `${elRect.left - containerRect.left + elRect.width / 2 - 20}px`;
+                await new Promise(r => setTimeout(r, 1000));
+
+                if (seg.active) {
+                    log(`跳过活动片段 ${i} (黄金法则)。`);
+                    continue;
+                }
+
+                const isExpired = (Date.now() - seg.closedTime) > RETENTION_MS;
+                if (isExpired) {
+                    log(`片段 ${i} 已过期，正在删除...`);
+                    seg.deleting = true;
+                    segEl.classList.add('deleting');
+                } else {
+                    log(`片段 ${i} 未过期，保留。`);
+                }
+                await new Promise(r => setTimeout(r, 500));
+            }
+
+            state.segments = state.segments.filter(s => !s.deleting);
+            render();
+            cleanupBot.style.display = 'none';
+            log("--- 清理程序完成 ---");
+        }
+
+        function reset() {
+            state.segments = [];
+            state.messageCount = 0;
+            logOutput.innerHTML = '';
+            addSegment();
+            render();
+            log("模拟已重置。");
+        }
+
+        writeBtn.addEventListener('click', writeData);
+        cleanupBtn.addEventListener('click', runCleanup);
+        resetBtn.addEventListener('click', reset);
+
+        reset();
+    });
+</script>
+
+</body>
+</html>
