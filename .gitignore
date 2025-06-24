@@ -36,6 +36,7 @@ wheels/
 
 # MkDocs
 documentation/site/
+documentation/.cache/
 
 # Docker
 docker/data/
