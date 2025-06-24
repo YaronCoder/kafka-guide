@@ -124,5 +124,6 @@ nav:
       - ZooKeeper操作: '8.运维与开发/运维指南/查看 ZooKeeper 节点信息操作指南.md'
     - 开发指南:
       - Swagger文档: '8.运维与开发/开发指南/Swagger使用指南.md'
+      - Git操作: '8.运维与开发/开发指南/从Git仓库中移除已推送的文件.md'
     - 文档指南:
       - MkDocs使用: '8.运维与开发/文档指南/mkdocs-guide.md'
