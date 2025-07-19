@@ -1,0 +1,167 @@
+/* 自定义字体和颜色 */
+:root {
+    --md-text-font: "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    --md-code-font: "JetBrains Mono", "Fira Code", monospace;
+}
+
+/* 优化标题样式 */
+.md-typeset h1 {
+    font-weight: 600;
+    color: var(--md-primary-fg-color);
+    margin-bottom: 1.5em;
+}
+
+.md-typeset h2 {
+    font-weight: 500;
+    border-bottom: 2px solid var(--md-primary-fg-color--light);
+    padding-bottom: 0.2em;
+    margin-top: 2em;
+}
+
+.md-typeset h3 {
+    font-weight: 500;
+    border-bottom: 1px solid var(--md-primary-fg-color--light);
+    padding-bottom: 0.2em;
+    margin-top: 1.5em;
+    font-size: 1.25em;
+    color: var(--md-default-fg-color);
+}
+
+/* 优化代码块样式 */
+.md-typeset pre > code {
+    border-radius: 5px;
+    padding: 1em;
+}
+
+/* 优化引用块样式 */
+.md-typeset blockquote {
+    border-left: 4px solid var(--md-primary-fg-color);
+    background-color: var(--md-code-bg-color);
+    padding: 0.6em 1em;
+    border-radius: 0 5px 5px 0;
+}
+
+/* 优化表格样式 */
+.md-typeset table:not([class]) {
+    border-radius: 5px;
+    box-shadow: var(--md-shadow-z1);
+}
+
+.md-typeset table:not([class]) th {
+    background-color: var(--md-primary-fg-color--light);
+    color: var(--md-primary-bg-color);
+}
+
+/* 优化导航样式 */
+.md-nav__item .md-nav__link--active {
+    font-weight: 600;
+    color: var(--md-primary-fg-color);
+}
+
+/* 优化搜索框样式 */
+.md-search__input {
+    border-radius: 5px;
+}
+
+/* 优化标签样式 */
+.md-tag {
+    border-radius: 3px;
+    padding: 0.2em 0.5em;
+    font-size: 0.7em;
+    background-color: var(--md-code-bg-color);
+}
+
+/* 优化提示框样式 */
+.md-typeset .admonition,
+.md-typeset details {
+    border-radius: 5px;
+    box-shadow: var(--md-shadow-z1);
+}
+
+/* 优化代码注释样式 */
+.md-annotation__index {
+    border-radius: 50%;
+    background-color: var(--md-primary-fg-color);
+}
+
+/* 优化复制按钮样式 */
+.md-clipboard {
+    color: var(--md-default-fg-color--lighter);
+}
+
+.md-clipboard:hover {
+    color: var(--md-accent-fg-color);
+}
+
+/* 优化目录样式 */
+.md-nav--secondary .md-nav__item {
+    padding-left: 1.2em;
+    border-left: 2px solid transparent;
+    margin: 0.2em 0;
+}
+
+.md-nav--secondary .md-nav__item:hover {
+    border-left-color: var(--md-primary-fg-color--light);
+}
+
+/* 优化移动端样式 */
+@media screen and (max-width: 76.1875em) {
+    .md-nav--primary .md-nav__title {
+        background-color: var(--md-primary-fg-color);
+        color: var(--md-primary-bg-color);
+    }
+}
+
+/* Mermaid 图表样式优化 */
+.mermaid {
+    background: var(--md-primary-bg-color);
+    padding: 1em;
+    border-radius: 5px;
+    box-shadow: var(--md-shadow-z1);
+    margin: 1em 0;
+}
+
+/* 优化导航标签样式 */
+.md-tabs__link {
+    font-size: 0.8rem;
+    margin-top: 0.4rem;
+    opacity: 0.8;
+}
+
+.md-tabs__link--active {
+    font-weight: 600;
+    opacity: 1;
+}
+
+/* 优化代码行号样式 */
+.linenos {
+    color: var(--md-default-fg-color--lighter);
+    background-color: var(--md-code-bg-color);
+    padding-right: 0.8em;
+    border-right: 1px solid var(--md-default-fg-color--lightest);
+}
+
+/* 优化链接样式 */
+.md-typeset a {
+    color: var(--md-primary-fg-color);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
+}
+
+.md-typeset a:hover {
+    border-bottom-color: var(--md-primary-fg-color);
+}
+
+/* 优化列表样式 */
+.md-typeset ul li,
+.md-typeset ol li {
+    margin-bottom: 0.3em;
+}
+
+/* 优化代码内联样式 */
+.md-typeset code {
+    border-radius: 3px;
+    padding: 0.2em 0.4em;
+    font-size: 0.85em;
+} 
